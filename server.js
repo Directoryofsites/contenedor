@@ -38,7 +38,7 @@ try {
 }
 
 // Nombre del bucket
-const bucketName = process.env.GCS_BUCKET_NAME || 'gracia-vida-files';
+const bucketName = process.env.GCS_BUCKET_NAME || 'contenedor-files';
 const bucket = storage ? storage.bucket(bucketName) : null;
 
 // Ruta de prueba
@@ -282,4 +282,111 @@ app.post('/api/createFolder', async (req, res) => {
     
     console.log(`Creando carpeta en: ${folderPath}`);
     
-    // En Google Cloud
+    // En Google Cloud Storage, las carpetas son objetos con una / al final
+    const file = bucket.file(folderPath);
+    
+    // Crear un archivo vacío con ruta terminada en / para simular una carpeta
+    await file.save('', { contentType: 'application/x-directory' });
+    
+    // Hacer la carpeta pública
+    await file.makePublic();
+    
+    res.status(200).json({
+      success: true,
+      message: `Carpeta ${folderName} creada correctamente`,
+      folderPath: folderPath
+    });
+    
+  } catch (error) {
+    console.error('Error al crear carpeta:', error);
+    
+    res.status(500).json({
+      success: false,
+      message: `Error al crear la carpeta: ${error.message}`,
+      error: error.message
+    });
+  }
+});
+
+// Ruta para eliminar archivos o carpetas
+app.delete('/api/delete', async (req, res) => {
+  try {
+    const { path, isFolder } = req.query;
+    
+    if (!path) {
+      return res.status(400).json({
+        success: false,
+        message: 'No se ha especificado la ruta del elemento a eliminar'
+      });
+    }
+    
+    // Normalizar la ruta
+    let normalizedPath = path;
+    if (normalizedPath.startsWith('/')) {
+      normalizedPath = normalizedPath.substring(1);
+    }
+    
+    console.log(`Eliminando elemento en ruta: ${normalizedPath}, es carpeta: ${isFolder}`);
+    
+    if (isFolder === 'true') {
+      // Si es una carpeta, necesitamos eliminar todos los archivos dentro
+      
+      // Asegurarse de que la ruta de la carpeta termine con /
+      if (!normalizedPath.endsWith('/')) {
+        normalizedPath += '/';
+      }
+      
+      console.log(`Eliminando contenido de carpeta: ${normalizedPath}`);
+      
+      // Listar todos los archivos con ese prefijo
+      const [files] = await bucket.getFiles({
+        prefix: normalizedPath
+      });
+      
+      // Eliminar cada archivo dentro de la carpeta
+      const deletePromises = files.map(file => file.delete());
+      await Promise.all(deletePromises);
+      
+      res.status(200).json({
+        success: true,
+        message: `Carpeta ${normalizedPath} y su contenido eliminados correctamente`,
+        elementsDeleted: files.length
+      });
+    } else {
+      // Si es un archivo individual, simplemente lo eliminamos
+      const file = bucket.file(normalizedPath);
+      
+      // Verificar si el archivo existe
+      const [exists] = await file.exists();
+      if (!exists) {
+        return res.status(404).json({
+          success: false,
+          message: `El elemento ${normalizedPath} no existe`
+        });
+      }
+      
+      // Eliminar el archivo
+      await file.delete();
+      
+      res.status(200).json({
+        success: true,
+        message: `Elemento ${normalizedPath} eliminado correctamente`
+      });
+    }
+    
+  } catch (error) {
+    console.error('Error al eliminar elemento:', error);
+    
+    res.status(500).json({
+      success: false,
+      message: `Error al eliminar el elemento: ${error.message}`,
+      error: error.message
+    });
+  }
+});
+
+// Iniciar el servidor
+app.listen(PORT, () => {
+  console.log(`Servidor iniciado en el puerto ${PORT}`);
+  console.log(`Bucket configurado: ${bucketName}`);
+});

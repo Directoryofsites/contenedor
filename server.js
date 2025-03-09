@@ -22,15 +22,24 @@ let storage;
 try {
   // Si tenemos las credenciales como variable de entorno JSON
   if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
-    // Parsear el JSON directamente
-    const credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
-    
-    // Usar el objeto de credenciales directamente
-    storage = new Storage({
-      credentials: credentials
-    });
-    
-    console.log('Credenciales de GCS configuradas desde variable de entorno JSON');
+    try {
+      // Parsear el JSON directamente
+      const credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+      
+      // Verificar si la clave privada está presente y en formato correcto
+      console.log('Verificando estructura de credenciales...');
+      console.log('Campos presentes:', Object.keys(credentials));
+      
+      // Usar el objeto de credenciales directamente
+      storage = new Storage({
+        credentials: credentials
+      });
+      
+      console.log('Credenciales de GCS configuradas desde variable de entorno JSON');
+    } catch (parseError) {
+      console.error('Error al analizar JSON de credenciales:', parseError);
+      throw parseError;
+    }
   } else {
     // Uso de la variable de entorno tradicional GOOGLE_APPLICATION_CREDENTIALS
     storage = new Storage();

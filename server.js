@@ -22,6 +22,13 @@ app.use(express.json());
 // Configuración de Google Cloud Storage
 let storage;
 try {
+  console.log("Variables disponibles:", {
+    project_id: process.env.GCS_PROJECT_ID ? "presente" : "ausente",
+    private_key: process.env.GCS_PRIVATE_KEY ? "presente" : "ausente",
+    client_email: process.env.GCS_CLIENT_EMAIL ? "presente" : "ausente",
+    json_creds: process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON ? "presente" : "ausente"
+  });
+  
   // Comprueba si tenemos las variables individuales para construir las credenciales
   if (process.env.GCS_PROJECT_ID && process.env.GCS_PRIVATE_KEY && process.env.GCS_CLIENT_EMAIL) {
     console.log('Usando credenciales individuales para GCS');
@@ -41,6 +48,8 @@ try {
       universe_domain: "googleapis.com"
     };
     
+    console.log("Credenciales construidas con éxito");
+    
     // Usar el objeto de credenciales
     storage = new Storage({
       credentials: credentials
@@ -50,14 +59,27 @@ try {
   } 
   // Verifica si tenemos el JSON completo
   else if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
-    const tempCredentialPath = path.join(os.tmpdir(), 'gcs-credentials.json');
-    fs.writeFileSync(tempCredentialPath, process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
-    
-    storage = new Storage({
-      keyFilename: tempCredentialPath
-    });
-    
-    console.log('Credenciales de GCS configuradas desde variable de entorno JSON');
+    console.log('Usando credenciales JSON completas');
+    // Probar con un enfoque diferente al archivo temporal
+    try {
+      const credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+      storage = new Storage({
+        credentials: credentials
+      });
+      console.log('Credenciales de GCS configuradas desde JSON parseado');
+    } catch (parseError) {
+      console.error('Error al parsear JSON de credenciales:', parseError);
+      
+      // Enfoque con archivo temporal como respaldo
+      const tempCredentialPath = path.join(os.tmpdir(), 'gcs-credentials.json');
+      fs.writeFileSync(tempCredentialPath, process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+      
+      storage = new Storage({
+        keyFilename: tempCredentialPath
+      });
+      
+      console.log('Credenciales de GCS configuradas desde variable de entorno JSON (archivo temporal)');
+    }
   } else {
     // Uso de la variable de entorno tradicional GOOGLE_APPLICATION_CREDENTIALS
     storage = new Storage();
@@ -66,7 +88,6 @@ try {
 } catch (error) {
   console.error('Error al configurar Google Cloud Storage:', error);
 }
-
 
 
 

@@ -22,73 +22,41 @@ app.use(express.json());
 // Configuración de Google Cloud Storage
 let storage;
 try {
-  console.log("Variables disponibles:", {
-    project_id: process.env.GCS_PROJECT_ID ? "presente" : "ausente",
-    private_key: process.env.GCS_PRIVATE_KEY ? "presente" : "ausente",
-    client_email: process.env.GCS_CLIENT_EMAIL ? "presente" : "ausente",
-    json_creds: process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON ? "presente" : "ausente"
-  });
-  
-  // Comprueba si tenemos las variables individuales para construir las credenciales
-  if (process.env.GCS_PROJECT_ID && process.env.GCS_PRIVATE_KEY && process.env.GCS_CLIENT_EMAIL) {
-    console.log('Usando credenciales individuales para GCS');
-    
-    // Construir el objeto de credenciales manualmente
-    const credentials = {
-      type: "service_account",
-      project_id: process.env.GCS_PROJECT_ID,
-      private_key_id: process.env.GCS_PRIVATE_KEY_ID || "",
-      private_key: process.env.GCS_PRIVATE_KEY.replace(/\\n/g, "\n"), // Asegura que los saltos de línea se manejen correctamente
-      client_email: process.env.GCS_CLIENT_EMAIL,
-      client_id: process.env.GCS_CLIENT_ID || "",
-      auth_uri: "https://accounts.google.com/o/oauth2/auth",
-      token_uri: "https://oauth2.googleapis.com/token",
-      auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
-      client_x509_cert_url: `https://www.googleapis.com/robot/v1/metadata/x509/${encodeURIComponent(process.env.GCS_CLIENT_EMAIL)}`,
-      universe_domain: "googleapis.com"
-    };
-    
-    console.log("Credenciales construidas con éxito");
-    
-    // Usar el objeto de credenciales
-    storage = new Storage({
-      credentials: credentials
-    });
-    
-    console.log('Credenciales de GCS configuradas desde variables individuales');
-  } 
-  // Verifica si tenemos el JSON completo
-  else if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
+  // Solo usaremos el enfoque de JSON parseado
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
     console.log('Usando credenciales JSON completas');
-    // Probar con un enfoque diferente al archivo temporal
+    
     try {
-      const credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+      // Parsear el JSON directamente
+      const credentialString = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+      console.log('Longitud del string de credenciales:', credentialString.length);
+      
+      const credentials = JSON.parse(credentialString);
+      console.log('JSON parseado correctamente');
+      console.log('Campos en credenciales:', Object.keys(credentials));
+      
+      // Asegurarnos de que la clave privada tenga el formato correcto
+      if (credentials.private_key) {
+        credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
+        console.log('Clave privada formateada');
+      }
+      
       storage = new Storage({
         credentials: credentials
       });
+      
       console.log('Credenciales de GCS configuradas desde JSON parseado');
     } catch (parseError) {
       console.error('Error al parsear JSON de credenciales:', parseError);
-      
-      // Enfoque con archivo temporal como respaldo
-      const tempCredentialPath = path.join(os.tmpdir(), 'gcs-credentials.json');
-      fs.writeFileSync(tempCredentialPath, process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
-      
-      storage = new Storage({
-        keyFilename: tempCredentialPath
-      });
-      
-      console.log('Credenciales de GCS configuradas desde variable de entorno JSON (archivo temporal)');
+      throw parseError;
     }
   } else {
-    // Uso de la variable de entorno tradicional GOOGLE_APPLICATION_CREDENTIALS
-    storage = new Storage();
-    console.log('Credenciales de GCS configuradas desde variable de entorno tradicional');
+    console.error('No se encontraron credenciales para Google Cloud Storage');
+    throw new Error('No se encontraron credenciales para Google Cloud Storage');
   }
 } catch (error) {
   console.error('Error al configurar Google Cloud Storage:', error);
 }
-
 
 
 

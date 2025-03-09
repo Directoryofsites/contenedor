@@ -17,6 +17,8 @@ app.use(express.json());
 
 
 
+
+
 // Configuración de Google Cloud Storage
 let storage;
 try {
@@ -64,6 +66,8 @@ try {
 } catch (error) {
   console.error('Error al configurar Google Cloud Storage:', error);
 }
+
+
 
 
 

@@ -15,16 +15,19 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+
+
 // Configuración de Google Cloud Storage
 let storage;
 try {
   // Si tenemos las credenciales como variable de entorno JSON
   if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
-    const tempCredentialPath = path.join(os.tmpdir(), 'gcs-credentials.json');
-    fs.writeFileSync(tempCredentialPath, process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+    // Parsear el JSON directamente
+    const credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
     
+    // Usar el objeto de credenciales directamente
     storage = new Storage({
-      keyFilename: tempCredentialPath
+      credentials: credentials
     });
     
     console.log('Credenciales de GCS configuradas desde variable de entorno JSON');
@@ -36,6 +39,8 @@ try {
 } catch (error) {
   console.error('Error al configurar Google Cloud Storage:', error);
 }
+
+
 
 // Nombre del bucket
 const bucketName = process.env.GCS_BUCKET_NAME || 'contenedor-files';

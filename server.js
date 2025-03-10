@@ -19,9 +19,10 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Configuración de Supabase
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY;
+
+// Configuración de Supabase con valores predeterminados para pruebas
+const supabaseUrl = process.env.SUPABASE_URL || 'https://bxkzxxokdvfobcpbmldj.supabase.co';
+const supabaseKey = process.env.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ4a3p4eG9rZHZmb2JjcGJtbGRqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MTU2NzMwNiwiZXhwIjoyMDU3MTQzMzA2fQ.HofSSYqlfoVHwe_L4pXsVd0JzhBR65PPPEDP0pAh6uM';
 const bucketName = process.env.BUCKET_NAME || 'archivos';
 
 // Crear cliente de Supabase

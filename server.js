@@ -34,8 +34,14 @@ try {
   if (!process.env.SUPABASE_KEY) {
     throw new Error('SUPABASE_KEY no está configurada en las variables de entorno');
   }
+
   
-  supabase = createClient(supabaseUrl, supabaseKey);
+  supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+
+
+
+
+
   console.log('Cliente de Supabase configurado correctamente');
 } catch (error) {
   console.error('Error al configurar cliente de Supabase:', error);

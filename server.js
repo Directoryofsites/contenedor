@@ -21,70 +21,42 @@ app.use(express.json());
 // Configuración de Google Cloud Storage
 let storage;
 try {
-  // Solo usaremos el enfoque de JSON parseado con verificación adicional
-  if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
-    console.log('Usando credenciales JSON completas');
-    
-    try {
-      // Parsear el JSON directamente
-      const credentialString = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
-      console.log('Longitud del string de credenciales:', credentialString.length);
-      
-      const credentials = JSON.parse(credentialString);
-      console.log('JSON parseado correctamente');
-      console.log('Campos en credenciales:', Object.keys(credentials));
-      
-      // Verificar que tenga los campos necesarios
-      if (!credentials.client_email) {
-        console.error('Error: No se encontró el campo client_email en las credenciales');
-        console.log('Contenido de credenciales (parcial):', JSON.stringify(credentials).substring(0, 100) + '...');
-        throw new Error('El objeto JSON no contiene un campo client_email');
-      }
-      
-      if (!credentials.private_key) {
-        console.error('Error: No se encontró el campo private_key en las credenciales');
-        throw new Error('El objeto JSON no contiene un campo private_key');
-      }
-      
-      // Asegurarnos de que la clave privada tenga el formato correcto
-      credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
-      console.log('Clave privada formateada');
-      
-      // Usar el método credentials directamente
-      storage = new Storage({
-        credentials: credentials
-      });
-      
-      console.log('Credenciales de GCS configuradas desde JSON parseado');
-    } catch (parseError) {
-      console.error('Error al parsear o procesar JSON de credenciales:', parseError);
-      
-      // Intentemos un enfoque alternativo como último recurso
-      console.log('Intentando enfoque alternativo con variable de entorno directa');
-      
-      // Crear un archivo temporal con el contenido de las credenciales
-      const fs = require('fs');
-      const os = require('os');
-      const path = require('path');
-      
-      const tempFilePath = path.join(os.tmpdir(), 'gcs-creds.json');
-      fs.writeFileSync(tempFilePath, process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
-      console.log('Archivo temporal de credenciales creado en:', tempFilePath);
-      
-      // Intentar cargar el archivo directamente
-      storage = new Storage({
-        keyFilename: tempFilePath
-      });
-      
-      console.log('Credenciales de GCS configuradas desde archivo temporal');
-    }
-  } else {
-    console.error('No se encontraron credenciales para Google Cloud Storage');
-    throw new Error('No se encontraron credenciales para Google Cloud Storage');
-  }
+  console.log('Usando variables individuales para autenticación de GCS');
+  
+  // Construir el objeto de credenciales usando variables individuales
+  const credentials = {
+    type: process.env.GCS_TYPE || "service_account",
+    project_id: process.env.GCS_PROJECT_ID,
+    private_key_id: process.env.GCS_PRIVATE_KEY_ID,
+    private_key: process.env.GCS_PRIVATE_KEY ? process.env.GCS_PRIVATE_KEY.replace(/\\n/g, '\n') : undefined,
+    client_email: process.env.GCS_CLIENT_EMAIL,
+    client_id: process.env.GCS_CLIENT_ID,
+    auth_uri: process.env.GCS_AUTH_URI || "https://accounts.google.com/o/oauth2/auth",
+    token_uri: process.env.GCS_TOKEN_URI || "https://oauth2.googleapis.com/token",
+    auth_provider_x509_cert_url: process.env.GCS_AUTH_PROVIDER_X509_CERT_URL || "https://www.googleapis.com/oauth2/v1/certs",
+    client_x509_cert_url: process.env.GCS_CLIENT_X509_CERT_URL,
+    universe_domain: "googleapis.com"
+  };
+  
+  console.log('Variables de credenciales disponibles:', {
+    type: credentials.type ? "presente" : "ausente",
+    project_id: credentials.project_id ? "presente" : "ausente",
+    private_key_id: credentials.private_key_id ? "presente" : "ausente",
+    private_key: credentials.private_key ? "presente" : "ausente",
+    client_email: credentials.client_email ? "presente" : "ausente",
+    client_id: credentials.client_id ? "presente" : "ausente"
+  });
+  
+  // Inicializar el cliente de Storage con las credenciales
+  storage = new Storage({
+    credentials: credentials
+  });
+  
+  console.log('Credenciales de GCS configuradas correctamente');
 } catch (error) {
   console.error('Error al configurar Google Cloud Storage:', error);
 }
+
 
 
 // Nombre del bucket

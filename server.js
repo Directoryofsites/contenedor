@@ -1,11 +1,10 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { Storage } = require('@google-cloud/storage');
+const { createClient } = require('@supabase/supabase-js');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const os = require('os');
 
 // Configuración inicial
 const app = express();
@@ -15,53 +14,28 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+// Configuración de Supabase
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+const bucketName = process.env.BUCKET_NAME || 'archivos';
 
-
-
-// Configuración de Google Cloud Storage
-let storage;
+// Crear cliente de Supabase
+let supabase;
 try {
-  console.log('Usando variables individuales para autenticación de GCS');
-  
-  // Construir el objeto de credenciales usando variables individuales
-  const credentials = {
-    type: process.env.GCS_TYPE || "service_account",
-    project_id: process.env.GCS_PROJECT_ID,
-    private_key_id: process.env.GCS_PRIVATE_KEY_ID,
-    private_key: process.env.GCS_PRIVATE_KEY ? process.env.GCS_PRIVATE_KEY.replace(/\\n/g, '\n') : undefined,
-    client_email: process.env.GCS_CLIENT_EMAIL,
-    client_id: process.env.GCS_CLIENT_ID,
-    auth_uri: process.env.GCS_AUTH_URI || "https://accounts.google.com/o/oauth2/auth",
-    token_uri: process.env.GCS_TOKEN_URI || "https://oauth2.googleapis.com/token",
-    auth_provider_x509_cert_url: process.env.GCS_AUTH_PROVIDER_X509_CERT_URL || "https://www.googleapis.com/oauth2/v1/certs",
-    client_x509_cert_url: process.env.GCS_CLIENT_X509_CERT_URL,
-    universe_domain: "googleapis.com"
-  };
-  
-  console.log('Variables de credenciales disponibles:', {
-    type: credentials.type ? "presente" : "ausente",
-    project_id: credentials.project_id ? "presente" : "ausente",
-    private_key_id: credentials.private_key_id ? "presente" : "ausente",
-    private_key: credentials.private_key ? "presente" : "ausente",
-    client_email: credentials.client_email ? "presente" : "ausente",
-    client_id: credentials.client_id ? "presente" : "ausente"
-  });
-  
-  // Inicializar el cliente de Storage con las credenciales
-  storage = new Storage({
-    credentials: credentials
-  });
-  
-  console.log('Credenciales de GCS configuradas correctamente');
+  console.log('Configurando cliente de Supabase');
+  supabase = createClient(supabaseUrl, supabaseKey);
+  console.log('Cliente de Supabase configurado correctamente');
 } catch (error) {
-  console.error('Error al configurar Google Cloud Storage:', error);
+  console.error('Error al configurar cliente de Supabase:', error);
 }
 
-
-
-// Nombre del bucket
-const bucketName = process.env.GCS_BUCKET_NAME || 'contenedor-files';
-const bucket = storage ? storage.bucket(bucketName) : null;
+// Configuración de Multer para manejo de archivos
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 50 * 1024 * 1024, // Límite de 50MB
+  }
+});
 
 // Ruta de prueba
 app.get('/', (req, res) => {
@@ -71,41 +45,33 @@ app.get('/', (req, res) => {
   });
 });
 
-// Ruta para verificar la autenticación con Google Cloud Storage
+// Ruta para verificar la conexión con Supabase
 app.get('/api/auth-test', async (req, res) => {
   try {
-    if (!bucket) {
-      throw new Error('Bucket no configurado correctamente');
+    if (!supabase) {
+      throw new Error('Cliente de Supabase no configurado correctamente');
     }
     
-    // Obtener información del bucket
-    const [bucketMetadata] = await bucket.getMetadata();
+    // Listar buckets para verificar conexión
+    const { data, error } = await supabase.storage.listBuckets();
+    
+    if (error) {
+      throw error;
+    }
     
     res.status(200).json({
       success: true,
-      message: 'Conexión exitosa con Google Cloud Storage',
-      bucketInfo: {
-        bucketId: bucketMetadata.id,
-        bucketName: bucketMetadata.name,
-        location: bucketMetadata.location
-      }
+      message: 'Conexión exitosa con Supabase Storage',
+      buckets: data
     });
   } catch (error) {
     console.error('Error en prueba de autenticación:', error);
     
     res.status(500).json({
       success: false,
-      message: `Error al conectar con Google Cloud Storage: ${error.message}`,
+      message: `Error al conectar con Supabase Storage: ${error.message}`,
       error: error.message
     });
-  }
-});
-
-// Configuración de Multer para manejo de archivos
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 50 * 1024 * 1024, // Límite de 50MB
   }
 });
 
@@ -122,23 +88,28 @@ app.get('/api/files', async (req, res) => {
     
     console.log(`Listando archivos con prefijo: "${normalizedPrefix}"`);
     
-    const [files] = await bucket.getFiles({
-      prefix: normalizedPrefix,
-      delimiter: normalizedPrefix ? '/' : ''
-    });
+    const { data, error } = await supabase.storage
+      .from(bucketName)
+      .list(normalizedPrefix, {
+        sortBy: { column: 'name', order: 'asc' }
+      });
+    
+    if (error) {
+      throw error;
+    }
     
     // Formatear la respuesta
-    const formattedFiles = files.map(file => {
-      const filePath = file.name;
-      const fileName = path.basename(filePath);
+    const formattedFiles = data.map(item => {
+      // Identificar si es carpeta o archivo
+      const isFolder = !item.metadata || item.metadata.mimetype === 'application/x-directory';
       
       return {
-        name: fileName,
-        path: `/${filePath}`,
-        size: parseInt(file.metadata.size, 10),
-        contentType: file.metadata.contentType,
-        updated: file.metadata.updated,
-        isFolder: filePath.endsWith('/')
+        name: item.name,
+        path: normalizedPrefix ? `/${normalizedPrefix}/${item.name}` : `/${item.name}`,
+        size: item.metadata?.size || 0,
+        contentType: item.metadata?.mimetype || 'application/octet-stream',
+        updated: item.updated_at,
+        isFolder: isFolder
       };
     });
     
@@ -164,7 +135,8 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       });
     }
     
-    const filePath = req.body.path || req.file.originalname;
+    const filePath = req.body.path || '';
+    const fileName = req.file.originalname;
     
     // Normalizar la ruta
     let normalizedPath = filePath;
@@ -172,46 +144,37 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       normalizedPath = normalizedPath.substring(1);
     }
     
-    console.log(`Subiendo archivo a: ${normalizedPath}`);
+    // Construir la ruta completa del archivo
+    const fullPath = normalizedPath 
+      ? `${normalizedPath}/${fileName}` 
+      : fileName;
     
-    // Crear un archivo temporal en GCS
-    const file = bucket.file(normalizedPath);
+    console.log(`Subiendo archivo a: ${fullPath}`);
     
-    // Crear un stream de escritura
-    const stream = file.createWriteStream({
-      metadata: {
-        contentType: req.file.mimetype
-      }
-    });
-    
-    // Manejar eventos del stream
-    stream.on('error', (error) => {
-      console.error('Error en stream de subida:', error);
-      res.status(500).json({
-        success: false,
-        message: `Error al subir el archivo: ${error.message}`,
-        error: error.message
+    // Subir archivo a Supabase
+    const { data, error } = await supabase.storage
+      .from(bucketName)
+      .upload(fullPath, req.file.buffer, {
+        contentType: req.file.mimetype,
+        upsert: true
       });
+    
+    if (error) {
+      throw error;
+    }
+    
+    // Obtener URL pública
+    const { data: publicUrlData } = supabase.storage
+      .from(bucketName)
+      .getPublicUrl(fullPath);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Archivo subido correctamente',
+      fileName: fileName,
+      filePath: fullPath,
+      publicUrl: publicUrlData.publicUrl
     });
-    
-    stream.on('finish', async () => {
-      // Hacer el archivo público
-      await file.makePublic();
-      
-      const publicUrl = `https://storage.googleapis.com/${bucketName}/${normalizedPath}`;
-      
-      res.status(200).json({
-        success: true,
-        message: 'Archivo subido correctamente',
-        fileName: path.basename(normalizedPath),
-        filePath: normalizedPath,
-        publicUrl: publicUrl
-      });
-    });
-    
-    // Escribir el buffer del archivo en el stream
-    stream.end(req.file.buffer);
-    
   } catch (error) {
     console.error('Error al subir archivo:', error);
     
@@ -243,28 +206,20 @@ app.get('/api/download', async (req, res) => {
     
     console.log(`Descargando archivo desde: ${normalizedPath}`);
     
-    const file = bucket.file(normalizedPath);
+    // Obtener la URL pública
+    const { data } = supabase.storage
+      .from(bucketName)
+      .getPublicUrl(normalizedPath);
     
-    // Verificar si el archivo existe
-    const [exists] = await file.exists();
-    if (!exists) {
+    if (!data || !data.publicUrl) {
       return res.status(404).json({
         success: false,
-        message: `El archivo ${normalizedPath} no existe`
+        message: `No se pudo generar URL para ${normalizedPath}`
       });
     }
     
-    // Obtener metadatos del archivo
-    const [metadata] = await file.getMetadata();
-    
-    // Configurar headers para la descarga
-    res.setHeader('Content-Type', metadata.contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${path.basename(normalizedPath)}"`);
-    
-    // Crear un stream de lectura y enviarlo como respuesta
-    const readStream = file.createReadStream();
-    readStream.pipe(res);
-    
+    // Redireccionar al usuario a la URL pública
+    return res.redirect(data.publicUrl);
   } catch (error) {
     console.error('Error al descargar archivo:', error);
     
@@ -294,31 +249,33 @@ app.post('/api/createFolder', async (req, res) => {
       normalizedParentPath = normalizedParentPath.substring(1);
     }
     
-    // Si la ruta padre no está vacía y no termina con /, añadir /
-    if (normalizedParentPath && !normalizedParentPath.endsWith('/')) {
-      normalizedParentPath += '/';
-    }
-    
     // Construir la ruta completa de la carpeta
-    const folderPath = `${normalizedParentPath}${folderName}/`;
+    const folderPath = normalizedParentPath
+      ? `${normalizedParentPath}/${folderName}/.folder`
+      : `${folderName}/.folder`;
     
     console.log(`Creando carpeta en: ${folderPath}`);
     
-    // En Google Cloud Storage, las carpetas son objetos con una / al final
-    const file = bucket.file(folderPath);
+    // En Supabase Storage, las carpetas son implícitas
+    // Creamos un archivo vacío oculto para representar la carpeta
+    const { error } = await supabase.storage
+      .from(bucketName)
+      .upload(folderPath, new Uint8Array(0), {
+        contentType: 'application/x-directory',
+        upsert: true
+      });
     
-    // Crear un archivo vacío con ruta terminada en / para simular una carpeta
-    await file.save('', { contentType: 'application/x-directory' });
-    
-    // Hacer la carpeta pública
-    await file.makePublic();
+    if (error) {
+      throw error;
+    }
     
     res.status(200).json({
       success: true,
       message: `Carpeta ${folderName} creada correctamente`,
-      folderPath: folderPath
+      folderPath: normalizedParentPath
+        ? `${normalizedParentPath}/${folderName}`
+        : folderName
     });
-    
   } catch (error) {
     console.error('Error al crear carpeta:', error);
     
@@ -351,51 +308,54 @@ app.delete('/api/delete', async (req, res) => {
     console.log(`Eliminando elemento en ruta: ${normalizedPath}, es carpeta: ${isFolder}`);
     
     if (isFolder === 'true') {
-      // Si es una carpeta, necesitamos eliminar todos los archivos dentro
+      // Para carpetas, primero listamos su contenido
+      const { data, error: listError } = await supabase.storage
+        .from(bucketName)
+        .list(normalizedPath);
       
-      // Asegurarse de que la ruta de la carpeta termine con /
-      if (!normalizedPath.endsWith('/')) {
-        normalizedPath += '/';
+      if (listError) {
+        throw listError;
       }
       
-      console.log(`Eliminando contenido de carpeta: ${normalizedPath}`);
+      // Construimos rutas completas para todos los elementos dentro
+      const itemsToDelete = data.map(item => 
+        `${normalizedPath}/${item.name}`
+      );
       
-      // Listar todos los archivos con ese prefijo
-      const [files] = await bucket.getFiles({
-        prefix: normalizedPath
-      });
+      // Añadimos el marcador .folder de la carpeta
+      itemsToDelete.push(`${normalizedPath}/.folder`);
       
-      // Eliminar cada archivo dentro de la carpeta
-      const deletePromises = files.map(file => file.delete());
-      await Promise.all(deletePromises);
+      // Eliminamos todos los elementos
+      if (itemsToDelete.length > 0) {
+        const { error: deleteError } = await supabase.storage
+          .from(bucketName)
+          .remove(itemsToDelete);
+        
+        if (deleteError && deleteError.message !== 'Object not found') {
+          throw deleteError;
+        }
+      }
       
       res.status(200).json({
         success: true,
         message: `Carpeta ${normalizedPath} y su contenido eliminados correctamente`,
-        elementsDeleted: files.length
+        elementsDeleted: itemsToDelete.length
       });
     } else {
-      // Si es un archivo individual, simplemente lo eliminamos
-      const file = bucket.file(normalizedPath);
+      // Para archivos individuales
+      const { error } = await supabase.storage
+        .from(bucketName)
+        .remove([normalizedPath]);
       
-      // Verificar si el archivo existe
-      const [exists] = await file.exists();
-      if (!exists) {
-        return res.status(404).json({
-          success: false,
-          message: `El elemento ${normalizedPath} no existe`
-        });
+      if (error) {
+        throw error;
       }
-      
-      // Eliminar el archivo
-      await file.delete();
       
       res.status(200).json({
         success: true,
         message: `Elemento ${normalizedPath} eliminado correctamente`
       });
     }
-    
   } catch (error) {
     console.error('Error al eliminar elemento:', error);
     
@@ -411,4 +371,5 @@ app.delete('/api/delete', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Servidor iniciado en el puerto ${PORT}`);
   console.log(`Bucket configurado: ${bucketName}`);
+  console.log(`Supabase URL: ${supabaseUrl}`);
 });

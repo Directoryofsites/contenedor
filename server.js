@@ -27,31 +27,24 @@ const bucketName = process.env.BUCKET_NAME || 'archivos';
 
 // Crear cliente de Supabase
 let supabase;
+
+
+
 try {
   console.log('Configurando cliente de Supabase');
   console.log('SUPABASE_URL disponible:', !!process.env.SUPABASE_URL);
   console.log('SUPABASE_KEY disponible:', !!process.env.SUPABASE_KEY);
-  console.log('SUPABASE_URL:', process.env.SUPABASE_URL);
+  console.log('SUPABASE_URL:', supabaseUrl);
   
-  if (!process.env.SUPABASE_URL) {
-    throw new Error('SUPABASE_URL no está configurada en las variables de entorno');
-  }
+  // No es necesario verificar porque ya proporcionamos valores predeterminados
   
-  if (!process.env.SUPABASE_KEY) {
-    throw new Error('SUPABASE_KEY no está configurada en las variables de entorno');
-  }
-
-  
-  supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
-
-
-
-
-
+  supabase = createClient(supabaseUrl, supabaseKey);
   console.log('Cliente de Supabase configurado correctamente');
 } catch (error) {
   console.error('Error al configurar cliente de Supabase:', error);
 }
+
+
 
 // Configuración de Multer para manejo de archivos
 const upload = multer({

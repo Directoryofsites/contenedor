@@ -23,6 +23,18 @@ const bucketName = process.env.BUCKET_NAME || 'archivos';
 let supabase;
 try {
   console.log('Configurando cliente de Supabase');
+  console.log('SUPABASE_URL disponible:', !!process.env.SUPABASE_URL);
+  console.log('SUPABASE_KEY disponible:', !!process.env.SUPABASE_KEY);
+  console.log('SUPABASE_URL:', process.env.SUPABASE_URL);
+  
+  if (!process.env.SUPABASE_URL) {
+    throw new Error('SUPABASE_URL no está configurada en las variables de entorno');
+  }
+  
+  if (!process.env.SUPABASE_KEY) {
+    throw new Error('SUPABASE_KEY no está configurada en las variables de entorno');
+  }
+  
   supabase = createClient(supabaseUrl, supabaseKey);
   console.log('Cliente de Supabase configurado correctamente');
 } catch (error) {
@@ -41,15 +53,20 @@ const upload = multer({
 app.get('/', (req, res) => {
   res.send({
     message: 'API del explorador de archivos funcionando correctamente',
-    serverTime: new Date().toISOString()
+    serverTime: new Date().toISOString(),
+    supabaseConfigured: !!supabase
   });
 });
 
 // Ruta para verificar la conexión con Supabase
 app.get('/api/auth-test', async (req, res) => {
   try {
+    // Verificar si Supabase está configurado
     if (!supabase) {
-      throw new Error('Cliente de Supabase no configurado correctamente');
+      return res.status(500).json({
+        success: false,
+        message: 'Cliente de Supabase no configurado correctamente. Verifica las variables de entorno SUPABASE_URL y SUPABASE_KEY.'
+      });
     }
     
     // Listar buckets para verificar conexión
@@ -78,6 +95,14 @@ app.get('/api/auth-test', async (req, res) => {
 // Ruta para listar archivos
 app.get('/api/files', async (req, res) => {
   try {
+    // Verificar si Supabase está configurado
+    if (!supabase) {
+      return res.status(500).json({
+        success: false,
+        message: 'Cliente de Supabase no configurado correctamente. Verifica las variables de entorno SUPABASE_URL y SUPABASE_KEY.'
+      });
+    }
+    
     const prefix = req.query.prefix || '';
     
     // Normalizar el prefijo
@@ -128,6 +153,14 @@ app.get('/api/files', async (req, res) => {
 // Ruta para subir archivos
 app.post('/api/upload', upload.single('file'), async (req, res) => {
   try {
+    // Verificar si Supabase está configurado
+    if (!supabase) {
+      return res.status(500).json({
+        success: false,
+        message: 'Cliente de Supabase no configurado correctamente. Verifica las variables de entorno SUPABASE_URL y SUPABASE_KEY.'
+      });
+    }
+    
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -189,6 +222,14 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 // Ruta para descargar archivos
 app.get('/api/download', async (req, res) => {
   try {
+    // Verificar si Supabase está configurado
+    if (!supabase) {
+      return res.status(500).json({
+        success: false,
+        message: 'Cliente de Supabase no configurado correctamente. Verifica las variables de entorno SUPABASE_URL y SUPABASE_KEY.'
+      });
+    }
+    
     const filePath = req.query.path;
     
     if (!filePath) {
@@ -234,6 +275,14 @@ app.get('/api/download', async (req, res) => {
 // Ruta para crear carpetas
 app.post('/api/createFolder', async (req, res) => {
   try {
+    // Verificar si Supabase está configurado
+    if (!supabase) {
+      return res.status(500).json({
+        success: false,
+        message: 'Cliente de Supabase no configurado correctamente. Verifica las variables de entorno SUPABASE_URL y SUPABASE_KEY.'
+      });
+    }
+    
     const { parentPath, folderName } = req.body;
     
     if (!folderName) {
@@ -290,6 +339,14 @@ app.post('/api/createFolder', async (req, res) => {
 // Ruta para eliminar archivos o carpetas
 app.delete('/api/delete', async (req, res) => {
   try {
+    // Verificar si Supabase está configurado
+    if (!supabase) {
+      return res.status(500).json({
+        success: false,
+        message: 'Cliente de Supabase no configurado correctamente. Verifica las variables de entorno SUPABASE_URL y SUPABASE_KEY.'
+      });
+    }
+    
     const { path, isFolder } = req.query;
     
     if (!path) {
@@ -372,4 +429,5 @@ app.listen(PORT, () => {
   console.log(`Servidor iniciado en el puerto ${PORT}`);
   console.log(`Bucket configurado: ${bucketName}`);
   console.log(`Supabase URL: ${supabaseUrl}`);
+  console.log(`Supabase Key configurada: ${!!supabaseKey}`);
 });

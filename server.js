@@ -1,4 +1,9 @@
 require('dotenv').config();
+
+console.log('Todas las variables de entorno disponibles:');
+console.log(Object.keys(process.env));
+
+
 const express = require('express');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
